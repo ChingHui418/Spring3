@@ -1,5 +1,9 @@
 package tw.hui.spring3.controller;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -7,7 +11,12 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import tw.hui.spring3.dto.CustomerDto;
+import tw.hui.spring3.dto.OrderDetailDto;
+import tw.hui.spring3.dto.OrderDto;
 import tw.hui.spring3.entity.Customer;
+import tw.hui.spring3.entity.Order;
+import tw.hui.spring3.entity.OrderDetail;
 import tw.hui.spring3.repo.CustomerRepo;
 
 @RestController
@@ -16,8 +25,98 @@ public class CustomerController {
 	@Autowired
 	private CustomerRepo customerRepo;
 	
-	@GetMapping("/{id}")
+	@GetMapping("/v1/{id}")
 	public ResponseEntity<Customer> test1(@PathVariable String id){
 		return ResponseEntity.ok(customerRepo.findById(id).orElse(null));
+	}
+	
+	@GetMapping("/v2/{id}")
+	public ResponseEntity<Customer> test2(@PathVariable String id){
+//		Optional<Customer> opt = customerRepo.findByCustomerID(id);
+//		if(opt.isPresent()) {
+//			Customer customer = opt.get();
+//		}
+		Customer customer = customerRepo.findByCustomerID(id).orElse(null);
+		
+//		customerRepo.findByCustomerID(id).orElse(new Customer());
+//		customerRepo.findByCustomerID(id).orElseGet(Customer::new);
+//		customerRepo.findByCustomerID(id).orElseThrow(
+//				() -> new IllegalArgumentException("xxx"));
+		
+		return ResponseEntity.ok(customer);
+	}
+	
+	@GetMapping("/v3/{id}")
+	public ResponseEntity<CustomerDto> test3(@PathVariable String id){
+		Customer c = customerRepo.findById(id).orElse(null);
+		// -----------------------------------------------------
+		List<Order> orders = c.getOrders();
+		
+		ArrayList<OrderDto> orderList = new ArrayList<>();
+		for(Order order : orders) {
+			List<OrderDetail> details = order.getOrderDetails();
+			
+			ArrayList<OrderDetailDto> detailDtos = new ArrayList<>();
+			for(OrderDetail detail : details) {
+				detailDtos.add(
+						new OrderDetailDto(
+								detail.getUnitPrice(), 
+								detail.getQuantity(), 
+								detail.getProduct().getProductName()));
+			}
+			
+			orderList.add(new OrderDto(
+					order.getOrderid(), order.getOrderdate(), detailDtos));
+		}
+		// -------------------------------------------------------
+		CustomerDto cDto = new CustomerDto(
+				c.getCustomerid(), c.getCompanyName(), orderList);
+		
+		return ResponseEntity.ok(cDto);
+	}
+	
+	@GetMapping("/v4/{id}")
+	public ResponseEntity<CustomerDto> test4(@PathVariable String id){
+		Optional<Customer> opt =  customerRepo.findById(id);
+		if(opt.isPresent()) {
+			Customer c = opt.get();
+			CustomerDto cDto = toCustomerDto(c);
+			return ResponseEntity.ok(cDto);
+		}else {
+			return ResponseEntity.notFound().build(); // 404
+		}
+	}
+	
+	@GetMapping("/v5/{id}")
+	public ResponseEntity<CustomerDto> test5(@PathVariable String id){
+		return customerRepo.findById(id)
+				.map(this::toCustomerDto)
+				.map(ResponseEntity::ok)
+				.orElseGet(() -> ResponseEntity.notFound().build());
+				// orElseGet(): isEmpty => delay 延遲執行
+				// orElse(): => right now
+	}
+	
+	private CustomerDto toCustomerDto(Customer c) {
+		return new CustomerDto(
+				c.getCustomerid(), 
+				c.getCompanyName(),
+				c.getOrders().stream().map(this::toOrderDto).toList()
+				);
+	}
+	
+	private OrderDto toOrderDto(Order o) {
+		return new OrderDto(
+				o.getOrderid(), 
+				o.getOrderdate(),
+				o.getOrderDetails().stream().map(this::toOrderDetailDto).toList()
+				);
+	}
+	
+	private OrderDetailDto toOrderDetailDto(OrderDetail od) {
+		return new OrderDetailDto(
+				od.getUnitPrice(), 
+				od.getQuantity(), 
+				od.getProduct().getProductName());
 	}
 }
